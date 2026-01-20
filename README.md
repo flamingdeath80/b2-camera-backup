@@ -62,7 +62,7 @@ This script performs a targeted backup of only today's footage by constructing t
 ### Backblaze B2 Setup
 
 1. Create a Backblaze B2 bucket
-2. Generate an application key with **read and write permissions only** (no delete)
+2. Generate an application key with **listFiles, readFiles, writeFiles** (no delete)
 3. Configure a lifecycle policy on the bucket to manage retention and prevent unlimited growth
 
 ### Rclone Setup
@@ -73,7 +73,7 @@ Configure rclone with your Backblaze B2 credentials:
 rclone config
 ```
 
-When configuring, note the following structure used in these scripts:
+When configuring, note the following structure used in these scripts, you can name your rclone authorised account, B2 bucket and B2 folder whatever you want but remember to make any necessary changes within the scripts:
 - **Remote name:** `b2backup` (the authorized account name in rclone)
 - **Bucket name:** `GLaDOSB2` (your Backblaze bucket name)
 - **Folder path:** `camera-backups/` (folder in the root of the bucket)
@@ -96,7 +96,7 @@ Optional configurations:
 
 #### b2rclonedynamiccopy.sh
 
-Edit the following variables:
+Edit the following variables to your use case:
 
 ```bash
 SOURCE_DIR=/home/me/bluecherry-docker/recordings/$YYYY/$MM/$DD/000005/
