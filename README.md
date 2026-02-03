@@ -74,7 +74,7 @@ rclone config
 ```
 
 When configuring, note the following structure used in these scripts, you can name your rclone authorised account, B2 bucket and B2 folder whatever you want but remember to make any necessary changes within the scripts:
-- **Remote name:** `b2backup` (the authorized account name in rclone)
+- **Remote name:** `b2backup` (the authorised account name in rclone)
 - **Bucket name:** `GLaDOSB2` (your Backblaze bucket name)
 - **Folder path:** `camera-backups/` (folder in the root of the bucket)
 
@@ -163,7 +163,7 @@ For weekly full backups (again, change as desired):
 
 ## Rclone Parameters Explained
 
-Both scripts use optimized rclone parameters:
+Both scripts use optimised rclone parameters:
 
 - `--transfers 4` - Upload 4 files simultaneously
 - `--checkers 8` - Check 8 files simultaneously for changes
@@ -204,7 +204,7 @@ The script will ping these URLs on success or failure, allowing integration with
 - **Lockfile:** Prevent concurrent runs by uncommenting lockfile protection
 - **Credentials:** Ensure rclone config file has appropriate permissions (600)
 
-## Cost Optimization
+## Cost Optimisation
 
 The dynamic script (`b2rclonedynamiccopy.sh`) is recommended for daily scheduled backups as it:
 - Makes fewer API calls
