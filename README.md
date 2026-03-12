@@ -1,251 +1,195 @@
-# Backblaze B2 Camera Backup Scripts
+# Bluecherry DVR → Backblaze B2 Backup Scripts
 
-A collection of bash scripts for backing up BluecherryDVR security camera footage to Backblaze B2 storage using rclone.
+A set of bash scripts to back up [Bluecherry DVR](https://www.bluecherrydvr.com/) recordings (MP4 + JPG files) to a private [Backblaze B2](https://www.backblaze.com/b2/cloud-storage.html) bucket using [rclone](https://rclone.org/), with automated retention management.
 
-## Overview
+Bluecherry splits recordings into 15-minute MP4 segments. These scripts are designed around that structure.
 
-These scripts provide automated offsite backup of security camera recordings (MP4 and JPG files) from a Bluecherry DVR system to Backblaze B2 cloud storage. The scripts are designed to work with read/write-only API credentials, relying on Backblaze lifecycle policies for retention management. These scripts can be configured for a different use case however
+---
 
 ## Scripts
 
-### 1. b2rclonefulldircopy.sh - Full Directory Backup
+| Script | Purpose |
+|--------|---------|
+| `b2-full-copy.sh` | One-time full backup of all recordings |
+| `b2-dynamic-copy.sh` | Incremental daily backup across all camera channels (designed for cron) |
+| `b2-retention.sh` | Deletes files older than 30 days from B2 |
 
-This script performs a comprehensive backup of all camera footage by traversing the entire source directory structure.
-
-**Use Case:** Suitable for initial backups or when you need to ensure all historical footage is backed up.
-
-**Features:**
-- Backs up multiple cameras in a single run
-- Processes the entire directory tree
-- Only uploads files between 10 seconds and 1 hour old (configurable)
-- Includes lockfile protection to prevent overlapping runs (commented out by default)
-- Optional healthcheck integration for monitoring
-- Per-camera logging
-
-**Pros:**
-- Ensures complete backup coverage
-- Handles multiple cameras automatically
-
-**Cons:**
-- Higher API call usage due to full directory traversal
-- Increased cost compared to targeted backups
-
-### 2. b2rclonedynamiccopy.sh - Date-Based Dynamic Backup
-
-This script performs a targeted backup of only today's footage by constructing the path dynamically based on the current date.
-
-**Use Case:** Ideal for daily scheduled backups where you only need to sync today's recordings.
-
-**Features:**
-- Automatically constructs paths using current date
-- Minimal API calls by targeting specific directories
-- Efficient for daily scheduled runs
-- Single camera per script instance
-
-**Pros:**
-- Lower API call count
-- Reduced costs
-- Faster execution time
-
-**Cons:**
-- Requires separate script instances or modifications for multiple cameras
-- Only backs up current day's footage
+---
 
 ## Prerequisites
 
-- **rclone** installed and configured
-- **Backblaze B2** account with a bucket configured
-- **Bluecherry** DVR system (or similar with date-based folder structure)
+- [rclone](https://rclone.org/install/) installed and configured with two B2 remotes (see below)
+- A Backblaze B2 bucket
+- Bluecherry DVR writing recordings to the local filesystem
+
+### Configuring rclone for B2
+
+These scripts use **two separate rclone remotes**, each backed by a B2 application key with different permission scopes. This follows the principle of least privilege — the backup scripts cannot delete files, and only the retention script can.
+
+Run `rclone config` twice to create both remotes:
+
+| Remote name | Required B2 permissions | Used by |
+|-------------|------------------------|---------|
+| `b2-readonly` | `listFiles`, `readFiles`, `writeFiles` | `b2-full-copy.sh`, `b2-dynamic-copy.sh` |
+| `b2-readwrite` | `listFiles`, `readFiles`, `writeFiles`, `deleteFiles` | `b2-retention.sh` |
+
+> Create separate application keys in the Backblaze dashboard (**Buckets → App Keys → Add a New Application Key**), one per remote, with the appropriate permissions for each.
+
+---
 
 ## Configuration
 
-### Backblaze B2 Setup
+Each script has a configuration block near the top. Edit these variables before use.
 
-1. Create a Backblaze B2 bucket
-2. Generate an application key with **listFiles, readFiles, writeFiles** (no delete)
-3. Configure a lifecycle policy on the bucket to manage retention and prevent unlimited growth
-
-### Rclone Setup
-
-Configure rclone with your Backblaze B2 credentials:
+### `b2-full-copy.sh`
 
 ```bash
-rclone config
+SOURCE_BASE="/home/me/bluecherry-docker/recordings/"  # Local Bluecherry recordings path
+RCLONE_REMOTE="b2-readonly"                           # rclone remote (no delete permissions)
+B2_BUCKET="GLaDOSB2"                                  # B2 bucket name
+B2_DEST_PATH="camera-backups"                         # Path within the bucket
+LOG_FILE="/var/log/b2-fullbackup.log"
 ```
 
-When configuring, note the following structure used in these scripts, you can name your rclone authorised account, B2 bucket and B2 folder whatever you want but remember to make any necessary changes within the scripts:
-- **Remote name:** `b2backup` (the authorised account name in rclone)
-- **Bucket name:** `GLaDOSB2` (your Backblaze bucket name)
-- **Folder path:** `camera-backups/` (folder in the root of the bucket)
-
-### Script Configuration
-
-#### b2rclonefulldircopy.sh
-
-Edit the following variables:
+### `b2-dynamic-copy.sh`
 
 ```bash
-SOURCE_BASE="/home/me/bluecherry-docker/recordings/"
-DEST_BASE="b2backup:GLaDOSB2/camera-backups/"
-CAMERAS=("000005" "000006")  # Camera prefixes/identifiers
+SOURCE_BASE="/home/me/bluecherry-docker/recordings"   # Local Bluecherry recordings path
+RCLONE_REMOTE="b2-readonly"                           # rclone remote (no delete permissions)
+B2_BUCKET="GLaDOSB2"                                  # B2 bucket name
+B2_DEST_PATH="camera-backups"                         # Path within the bucket
+LOG_FILE="/var/log/b2-backup.log"
+
+# Add or remove channel IDs to match your Bluecherry camera setup
+CAMERA_CHANNELS=(
+    "000001"
+    "000002"
+    "000005"
+)
+
+# Optional healthcheck URLs (leave empty to disable — e.g. healthchecks.io)
+HEALTHCHECK_OK=""
+HEALTHCHECK_FAIL=""
 ```
 
-Optional configurations:
-- Uncomment lockfile lines to prevent concurrent runs
-- Set `HEALTHCHECK_OK` and `HEALTHCHECK_FAIL` URLs for monitoring integration
-
-#### b2rclonedynamiccopy.sh
-
-Edit the following variables to your use case:
+### `b2-retention.sh`
 
 ```bash
-SOURCE_DIR=/home/me/bluecherry-docker/recordings/$YYYY/$MM/$DD/000005/
-B2_REMOTE=b2backup:GLaDOSB2/camera-backups/$YYYY/$MM/$DD/000005/
-LOG_FILE="/var/log/camera05-backup.log"
+RCLONE_REMOTE="b2-readwrite"      # rclone remote (requires delete permissions)
+B2_BUCKET="GLaDOSB2"              # B2 bucket name
+B2_DEST_PATH="camera-backups"     # Path within the bucket — must match copy scripts
+MAX_AGE="30d"                     # Retention period
+LOG_FILE="/var/log/b2retention.log"
 ```
 
-Note: The camera ID (e.g., `000005`) is hardcoded and should match your camera folder or prefix identifier.
-
-## Directory Structure
-
-The scripts expect the following source directory structure:
-
-```
-/home/me/bluecherry-docker/recordings/
-├── YYYY/
-│   ├── MM/
-│   │   ├── DD/
-│   │   │   ├── 000005/  # Camera 1
-│   │   │   │   ├── *.mp4
-│   │   │   │   └── *.jpg
-│   │   │   └── 000006/  # Camera 2
-│   │   │       ├── *.mp4
-│   │   │       └── *.jpg
-```
+---
 
 ## Usage
 
-### Make Scripts Executable
+### Initial Full Backup
+
+Run once to seed the B2 bucket with all existing recordings:
 
 ```bash
-chmod +x b2rclonefulldircopy.sh
-chmod +x b2rclonedynamiccopy.sh
+chmod +x b2-full-copy.sh
+./b2-full-copy.sh
 ```
 
-### Manual Execution
+This copies the entire `SOURCE_BASE` directory tree to B2. It can safely be re-run — rclone will skip files that are already present and unchanged.
+
+### Incremental Daily Backup
+
+Run on a schedule (every 15–30 minutes via cron) to keep B2 up to date:
 
 ```bash
-# Full directory backup
-./b2rclonefulldircopy.sh
-
-# Daily targeted backup
-./b2rclonedynamiccopy.sh
+chmod +x b2-dynamic-copy.sh
+./b2-dynamic-copy.sh
 ```
 
-### Automated Execution (Cron)
+The script iterates over every channel defined in `CAMERA_CHANNELS` and backs up each one for the current date. The `--min-age 10s` flag ensures rclone skips any files still being written by Bluecherry (i.e. the current active 15-minute segment), so only completed segments are uploaded.
 
-For daily backups using the dynamic script, below is an example cron frequency, you can change this to suite your usecase:
+It also includes a **midnight boundary guard**: during the `00:xx` hour, the previous day's directories are backed up across all channels to catch any segments that were still being written when the date rolled over.
+
+**Recommended cron entry** (every 15 minutes):
+
+```
+*/15 * * * * /home/me/b2-dynamic-copy.sh
+```
+
+### Retention Cleanup
+
+Run daily to purge recordings older than 30 days from B2 and remove empty directories:
 
 ```bash
-# Run every day at 2:00 AM
-0 2 * * * /path/to/b2rclonedynamiccopy.sh
-
-# Run every 15 minutes (for near real-time backup)
-*/15 * * * * /path/to/b2rclonedynamiccopy.sh
+chmod +x b2-retention.sh
+./b2-retention.sh
 ```
 
-For weekly full backups (again, change as desired):
+The script uses a lock file (`/tmp/b2retention.lock`) to prevent overlapping runs. It performs two steps:
 
-```bash
-# Run every Sunday at 3:00 AM
-0 3 * * 0 /path/to/b2rclonefulldircopy.sh
+1. Deletes all files older than `MAX_AGE` from the configured B2 path
+2. Removes any empty directories left behind
+
+**Recommended cron entry** (daily at 3am):
+
+```
+0 3 * * * /home/me/b2-retention.sh
 ```
 
-## Rclone Parameters Explained
+---
 
-Both scripts use optimised rclone parameters:
+## Directory Structure
 
-- `--transfers 4` - Upload 4 files simultaneously
-- `--checkers 8` - Check 8 files simultaneously for changes
-- `--b2-chunk-size 96M` - Upload chunks of 96MB
-- `--b2-upload-cutoff 200M` - Use multi-part uploads for files over 200MB
-- `--min-age 10s` - Only upload files older than 10 seconds (prevents uploading files still being written)
-- `--max-age 1h` - Only upload files younger than 1 hour (full script only)
-- `--log-level INFO` - Detailed logging
-- `--stats 1m` - Show statistics every minute
+The scripts mirror Bluecherry's on-disk layout in B2:
 
-## Logging
-
-Logs are written to:
-- **Full script:** `/var/log/camera-{CAMERA_ID}.log`
-- **Dynamic script:** `/var/log/camera05-backup.log` (or your configured path)
-
-View logs in real-time:
-
-```bash
-tail -f /var/log/camera-000005.log
+```
+camera-backups/
+└── YYYY/
+    └── MM/
+        └── DD/
+            ├── 000001/       # Camera channel ID
+            │   ├── *.mp4
+            │   └── *.jpg
+            ├── 000002/
+            │   ├── *.mp4
+            │   └── *.jpg
+            └── 000005/
+                ├── *.mp4
+                └── *.jpg
 ```
 
-## Monitoring
+Channel IDs correspond to Bluecherry's internal camera numbering. Add all of your active channel IDs to the `CAMERA_CHANNELS` array in `b2-dynamic-copy.sh`.
 
-The full directory script includes optional healthcheck integration. Set the following variables to enable:
+---
 
-```bash
-HEALTHCHECK_OK="https://hc-ping.com/your-uuid"
-HEALTHCHECK_FAIL="https://hc-ping.com/your-uuid/fail"
-```
+## Logs
 
-The script will ping these URLs on success or failure, allowing integration with services like Healthchecks.io.
+| Script | Default log path |
+|--------|-----------------|
+| `b2-full-copy.sh` | `/var/log/b2-fullbackup.log` |
+| `b2-dynamic-copy.sh` | `/var/log/b2-backup.log` |
+| `b2-retention.sh` | `/var/log/b2retention.log` |
 
-## Security Considerations
+All scripts append timestamped entries to their log files. rclone's own output is also written to the same log.
 
-- **API Permissions:** Scripts use read/write-only credentials (no delete permission)
-- **Retention:** Managed via Backblaze lifecycle policies, not via rclone
-- **Lockfile:** Prevent concurrent runs by uncommenting lockfile protection
-- **Credentials:** Ensure rclone config file has appropriate permissions (600)
+---
 
-## Cost Optimisation
+## rclone Transfer Settings
 
-The dynamic script (`b2rclonedynamiccopy.sh`) is recommended for daily scheduled backups as it:
-- Makes fewer API calls
-- Traverses only today's directory structure
-- Reduces transaction costs
+The copy scripts use the following rclone flags, tuned for B2:
 
-Use the full script (`b2rclonefulldircopy.sh`) sparingly for:
-- Initial backups
-- Verification runs
-- Recovery from backup gaps
+| Flag | Value | Purpose |
+|------|-------|---------|
+| `--transfers` | `4` | Parallel file uploads |
+| `--checkers` | `8` | Parallel file comparison checks |
+| `--b2-chunk-size` | `96M` | Multipart chunk size |
+| `--b2-upload-cutoff` | `200M` | Switch to multipart above this size |
+| `--min-age` | `10s` | Skip files modified in the last 10 seconds, preventing upload of segments still being written by Bluecherry |
 
-## Troubleshooting
+Adjust these based on your available bandwidth and B2 tier limits.
 
-### Files Not Uploading
-
-- Check `--min-age` setting - files might be too new
-- Verify source directory exists and contains files
-- Check rclone configuration with `rclone config show`
-
-### High API Costs
-
-- Ensure you're using the dynamic script for daily runs
-- Verify `--max-age` is set appropriately to avoid re-checking old files
-- Consider adjusting the cron schedule to run less frequently
-
-### Permission Errors
-
-- Verify rclone remote has write permissions to the bucket
-- Check that the API key is valid and not expired
-- Ensure the bucket exists and is accessible
+---
 
 ## License
 
-MIT License - feel free to modify and use as needed.
-
-## Contributing
-
-Contributions, issues, and feature requests are welcome!
-
-## Acknowledgments
-
-- Built with [rclone](https://rclone.org/)
-- Designed for [Bluecherry](https://www.bluecherrydvr.com/) DVR systems
-- Designed for [Backblaze B2](www.backblaze.com/) Cloud storage
+MIT — use and modify freely.
