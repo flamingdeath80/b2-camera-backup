@@ -44,27 +44,25 @@ Each script has a configuration block near the top. Edit these variables before 
 ### `b2-full-copy.sh`
 
 ```bash
-SOURCE_BASE="/home/me/bluecherry-docker/recordings/"  # Local Bluecherry recordings path
-RCLONE_REMOTE="b2-readonly"                           # rclone remote (no delete permissions)
-B2_BUCKET="GLaDOSB2"                                  # B2 bucket name
-B2_DEST_PATH="camera-backups"                         # Path within the bucket
+SOURCE_BASE="/path/to/bluecherry-docker/recordings/"  # Local Bluecherry recordings path
+RCLONE_REMOTE="rclone-config-name-here"               # rclone remote (no delete permissions)
+B2_BUCKET="b2-bucket-name-here"                       # B2 bucket name
+B2_DEST_PATH="b2-bucket-path-here"                    # Path within the bucket
 LOG_FILE="/var/log/b2-fullbackup.log"
 ```
 
 ### `b2-dynamic-copy.sh`
 
 ```bash
-SOURCE_BASE="/home/me/bluecherry-docker/recordings"   # Local Bluecherry recordings path
-RCLONE_REMOTE="b2-readonly"                           # rclone remote (no delete permissions)
-B2_BUCKET="GLaDOSB2"                                  # B2 bucket name
-B2_DEST_PATH="camera-backups"                         # Path within the bucket
+SOURCE_BASE="/path/to/bluecherry-docker/recordings/"  # Local Bluecherry recordings path
+RCLONE_REMOTE="rclone-config-name-here"               # rclone remote (no delete permissions)
+B2_BUCKET="b2-bucket-name-here"                       # B2 bucket name
+B2_DEST_PATH="b2-bucket-path-here"                    # Path within the bucket
 LOG_FILE="/var/log/b2-backup.log"
 
 # Add or remove channel IDs to match your Bluecherry camera setup
 CAMERA_CHANNELS=(
     "000001"
-    "000002"
-    "000005"
 )
 
 # Optional healthcheck URLs (leave empty to disable — e.g. healthchecks.io)
@@ -75,10 +73,10 @@ HEALTHCHECK_FAIL=""
 ### `b2-retention.sh`
 
 ```bash
-RCLONE_REMOTE="b2-readwrite"      # rclone remote (requires delete permissions)
-B2_BUCKET="GLaDOSB2"              # B2 bucket name
-B2_DEST_PATH="camera-backups"     # Path within the bucket — must match copy scripts
-MAX_AGE="30d"                     # Retention period
+RCLONE_REMOTE="rclone-config-name-here"      # rclone remote (requires delete permissions)
+B2_BUCKET="b2-bucket-name-here"              # B2 bucket name
+B2_DEST_PATH="b2-bucket-path-here"           # Path within the bucket — must match copy scripts
+MAX_AGE="30d"                                # Retention period
 LOG_FILE="/var/log/b2retention.log"
 ```
 
